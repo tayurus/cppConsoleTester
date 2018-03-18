@@ -1,8 +1,34 @@
 #include "stdafx.h"
 #include <windows.h>
-#include <string.h>
 #include "test.h"
 
+#include <iostream>
+#include <stdexcept>
+#include <stdio.h>
+#include <string>
+
+/*функция вызывает*/
+std::string exec(const char* cmd) {
+    char buffer[128];
+    std::string result = "";
+    FILE* pipe = _popen(cmd, "w");
+    if (!pipe) throw std::runtime_error("popen() failed!");
+    try {
+		fputs("10", pipe);
+		if (fgets(buffer, 128, pipe) != NULL)
+                result += buffer;
+		_pclose(pipe);
+      /*  while (!feof(pipe)) {
+            if (fgets(buffer, 128, pipe) != NULL)
+                result += buffer;
+        }*/
+    } catch (...) {
+        _pclose(pipe);
+        throw;
+    }
+    _pclose(pipe);
+    return result;
+}
 
 //ключевае слова в описании тестов
 char in[] = "Вход:\n";
@@ -44,10 +70,11 @@ int main(int argc, char* argv[])
 	
 	argv[1] = new char[100];
 	argv[2] = new char[100];
-	strcpy(argv[1], "tester1.exe");
+	strcpy(argv[1], "sum.exe");
 	strcpy(argv[2], "tests.txt");
+	
 	/* проверяем, что тестируемая программа и файл с тестами присутствуют в текущей директории */
-	//if (argc == 3)
+	if (argc == 3)
 	{
 		//попробовать "открыть" exe
 		FILE* exe = fopen(argv[1], "r");
@@ -102,13 +129,13 @@ int main(int argc, char* argv[])
 			test* tests = new test[testsCount];
 			int currentTest = 0;
 			char* ptr = strtok(bufForTests, delimeter);
-			while(ptr != NULL && testsCount > 0)
+			while(ptr != NULL)
 			{
 				if (currentTest != 0)
 					ptr++;
 				/*разбиваем тест по составляющим: имя, данные, статус*/
 				//название
-				int huy= strstr(ptr, "\n") - ptr;
+				int huy = strstr(ptr, "\n") - ptr;
 				tests[currentTest].name = new char[strstr(ptr, "\n") - ptr];
 				
 				memcpy(tests[currentTest].name, ptr, strstr(ptr, "\n") - ptr);
@@ -136,9 +163,61 @@ int main(int argc, char* argv[])
 				//переход к следующему тесту
 				ptr = strtok(NULL, delimeter);
 				currentTest++;
-				testsCount--;
+			}
+
+			//собственно, тестирование
+			//идем по всем тестам
+			for (int i = 0; i < testsCount; i++)
+			{
+				char* result;
+				//вызываем тестируемый exe с входными данными очередного теста и сохраняем пришедший результат
+				runTest(argv[1], tests[i].testIn);
+
+				//если пришедший результат соответствует ожидаемому
+				if (strcmp(result, tests[i].testOut) != 0)
+				{
+					//вывести название теста
+					printf("%s - ",tests[i].name);
+
+					//изменить цвет текста на зеленый
+					HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+					SetConsoleTextAttribute(handle, FOREGROUND_GREEN);
+
+					//вывести слово "пройден"
+					printf("ПРОЙДЕН\n");
+
+					//вернуть цвет обратно - белый
+					SetConsoleTextAttribute(handle, FOREGROUND_WHITE);
+				}
+				//иначе (если тест не пройден)
+				else
+				{
+					puts("-------------");
+					//вывести название теста
+					printf("%s - ",tests[i].name);
+
+					//изменить цвет текста на красный
+					HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+					SetConsoleTextAttribute(handle, FOREGROUND_RED);
+
+					//вывести слово "не пройден"
+					printf("НЕ ПРОЙДЕН\n");
+					SetConsoleTextAttribute(handle, FOREGROUND_WHITE);
+
+					//вывести, что ожидалось
+					puts("ОЖИДАЛОСЬ:");
+					puts(tests[i].testOut);
+
+					//вывести, что пришло
+					puts("ПРИШЛО ОТ ТЕСТЕРА:");
+					puts(result);
+					
+					puts("-------------");
+					
+				}
 				
 			}
+					
 		}
 		else
 			puts("ошибка чтения файла");
